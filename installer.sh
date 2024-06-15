@@ -55,10 +55,17 @@ if ! command_exists python3; then
 fi
 
 # Check if PyGTK is installed
-if ! python3 -c 'import gi; gi.require_version("Gtk", "3.0")' &>/dev/null; then
+if ! python3 -c 'import gi; gi.require_version("Gtk", "3.0")' 2>/dev/null; then
     install_pygtk
 fi
 
 # Run xp.py
 echo "Running xp.py..."
 python3 "$(dirname "$0")/installer-utils/xp.py"
+
+# Clean up cloned repositories
+echo "Cleaning up cloned repositories..."
+rm -rf "$(dirname "$0")/xfce-winxp-tc"
+rm -rf "$(dirname "$0")/nody-greeter"
+rm -rf "$(dirname "$0")/WelcomeXP"
+echo "Cleanup completed."

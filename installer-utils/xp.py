@@ -1,153 +1,211 @@
-import subprocess
-import os
 import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+import os
+gi.require_version('Gtk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
+gi.require_version('Gst', '1.0')
+gi.require_version('GstVideo', '1.0')
+from gi.repository import Gtk, Gdk, GdkPixbuf, Gst, GstVideo
 
-class WinXPThemeInstaller:
+
+class XPWelcomeWindow(Gtk.Window):
     def __init__(self):
-        # Create a new window
-        self.window = Gtk.Window()
-        self.window.set_title("Windows XP Theme Installer")
-        self.window.set_default_size(400, 300)
-        self.window.connect("destroy", Gtk.main_quit)
+        Gtk.Window.__init__(self, title="XP OOBE Theme Installer")
+        self.set_default_size(782, 495)
 
-        # Create a vertical box to hold everything
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.window.add(vbox)
+        # Create a fixed container to hold the background image and overlay elements
+        self.fixed_container = Gtk.Fixed()
+        self.add(self.fixed_container)
 
-        # Install WinXP Theme button
-        install_button = Gtk.Button(label="Install WinXP Theme")
-        install_button.connect("clicked", self.install_winxp_theme)
-        vbox.pack_start(install_button, expand=True, fill=True, padding=10)
+        # Load initial background image (Bitmap20142.jpg)
+        self.current_background = 'winxp-imgs/Bitmap20142.jpg'
+        self.load_background_image(self.current_background)
 
-        # Install WelcomeXP Theme checkbox
-        self.install_welcomexp = Gtk.CheckButton(label="Install WelcomeXP Theme")
-        vbox.pack_start(self.install_welcomexp, expand=True, fill=True, padding=10)
+        # Create and place text elements
+        self.create_text_elements()
 
-        # Status label
-        self.status_label = Gtk.Label()
-        vbox.pack_start(self.status_label, expand=False, fill=True, padding=10)
+        # Create an EventBox to hold the clickable image button
+        self.next_button_image = Gtk.Image()
+        self.next_button_pixbuf = GdkPixbuf.Pixbuf.new_from_file('winxp-imgs/continue.png')
+        self.next_button_pixbuf = self.next_button_pixbuf.scale_simple(30, 30, GdkPixbuf.InterpType.BILINEAR)
+        self.next_button_image.set_from_pixbuf(self.next_button_pixbuf)
 
-        # Set the current working directory to the parent folder of the script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        os.chdir(script_dir)
+        self.event_box = Gtk.EventBox()
+        self.event_box.set_size_request(30, 30)
+        self.event_box.add(self.next_button_image)
 
-        # Show all elements
-        self.window.show_all()
+        # Create a label with underlined 'N' and white text
+        next_label = Gtk.Label()
+        next_label.set_markup('<span foreground="white" font="Tahoma 10"><u>N</u>ext</span>')
+        next_label.set_halign(Gtk.Align.START)
 
-    def install_winxp_theme(self, widget):
-        try:
-            # Step 1: Detect Linux distribution
-            distro_info = self.detect_linux_distribution()
-            if distro_info is None:
-                raise RuntimeError("Unsupported Linux distribution.")
+        # Create a box to hold the label and the button
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hbox.pack_start(next_label, False, False, 0)
+        hbox.pack_start(self.event_box, False, False, 0)
 
-            # Step 2: Install build-time dependencies
-            self.update_status("Installing build-time dependencies...")
-            self.install_dependencies(distro_info)
+        # Calculate position for the hbox to be centered at the bottom right corner
+        button_x = 782 - 30 - 5  # 782 is the width of the window, 30 is the width of the button, 5 is the amount to move left
+        button_y = 495 - 40 + (40 - 30) // 2  # 495 is the height of the window, 40 is the bottom border height
 
-            # Step 3: Clone the repository and build the project
-            self.update_status("Cloning and building the WinXP Theme project...")
-            subprocess.run(['git', 'clone', 'https://github.com/rozniak/xfce-winxp-tc.git'])
-            subprocess.run(['bash', '-c', 'cd xfce-winxp-tc/packaging && ./buildall.sh'])
+        # Place the hbox at the calculated coordinates on the fixed container
+        self.fixed_container.put(hbox, button_x - 60, button_y)  # Adjust x position to accommodate the label
 
-            # Step 4: Install the output packages
-            self.update_status("Installing WinXP Theme packages...")
-            self.install_packages()
+        # Connect a signal to handle button clicks
+        self.event_box.connect("button-press-event", self.on_next_button_clicked)
 
-            self.update_status("WinXP Theme installed successfully!")
-        except Exception as e:
-            self.update_status(f"Error installing WinXP Theme: {str(e)}")
+        # Video player setup
+        self.video_uri = 'intro-wmv/intro.wmv'  # Path to your video file
+        self.init_video_player()
 
-        # Check if WelcomeXP installation is requested
-        if self.install_welcomexp.get_active():
-            self.install_welcomexp_theme(distro_info)
+        # Music player setup
+        self.init_music_player('title-wma/Isk3k3.mp3')  # Path to your music file
 
-    def install_welcomexp_theme(self, distro_info):
-        try:
-            # Step 5: Clone and install nody-greeter
-            self.update_status("Installing nody-greeter...")
-            subprocess.run(['git', 'clone', '--recursive', 'https://github.com/JezerM/nody-greeter.git'])
-            subprocess.run(['bash', '-c', 'cd nody-greeter && git checkout 1.5.2'])
-            subprocess.run(['bash', '-c', 'cd nody-greeter && npm install'])
-            subprocess.run(['bash', '-c', 'cd nody-greeter && npm run rebuild'])
-            subprocess.run(['bash', '-c', 'cd nody-greeter && npm run build'])
-            subprocess.run(['sudo', 'node', 'make', 'install'])
+        self.connect("destroy", self.on_destroy)
 
-            # Step 6: Clone and install WelcomeXP
-            self.update_status("Installing WelcomeXP Theme...")
-            subprocess.run(['git', 'clone', 'https://github.com/mshernandez5/WelcomeXP.git'])
-            subprocess.run(['bash', '-c', 'cd WelcomeXP && git checkout v0.4.1'])
+        self.show_all()
 
-            xp_fonts_dir = 'winxp-fonts'  # Assuming this is the directory structure after cloning
+    def load_background_image(self, image_path):
+        # Load and set the background image in the fixed container
+        if hasattr(self, 'background_image'):
+            self.fixed_container.remove(self.background_image)
 
-            # Step 8: Copy XP fonts to WelcomeXP/fonts/
-            self.update_status("Copying XP fonts to WelcomeXP...")
-            subprocess.run(['sudo', 'mkdir', '-p', '/usr/share/web-greeter/themes/WelcomeXP/fonts'])
-            subprocess.run(['sudo', 'cp', f'{xp_fonts_dir}/tahoma.ttf', '/usr/share/web-greeter/themes/WelcomeXP/fonts'])
-            subprocess.run(['sudo', 'cp', f'{xp_fonts_dir}/tahomabd.ttf', '/usr/share/web-greeter/themes/WelcomeXP/fonts'])
-            subprocess.run(['sudo', 'cp', f'{xp_fonts_dir}/FRADMIT.TTF', '/usr/share/web-greeter/themes/WelcomeXP/fonts'])
-            subprocess.run(['sudo', 'chmod', '-R', '755', '/usr/share/web-greeter/themes/WelcomeXP/fonts'])
+        if not os.path.isfile(image_path):
+            print(f"Error: {image_path} does not exist.")
+            return
 
-            # Step 9: Configure lightdm for WelcomeXP
-            self.update_status("Configuring lightdm for WelcomeXP...")
-            self.configure_lightdm(distro_info)
+        background_image = Gtk.Image()
+        background_pixbuf = GdkPixbuf.Pixbuf.new_from_file(image_path)
+        if background_pixbuf is None:
+            print(f"Error loading image from {image_path}")
+        else:
+            print(f"Successfully loaded image from {image_path}")
+        background_image.set_from_pixbuf(background_pixbuf)
+        self.fixed_container.put(background_image, 0, 0)
+        self.background_image = background_image
+        self.fixed_container.show_all()
 
-            self.update_status("WelcomeXP Theme installed successfully!")
-        except Exception as e:
-            self.update_status(f"Error installing WelcomeXP Theme: {str(e)}")
+    def create_text_elements(self):
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(b"""
+            .title {
+                font-size: 24pt;
+                font-family: 'Franklin Gothic Medium';
+                font-weight: bold;
+                color: #FFFFFF;
+                text-shadow: 4px 4px 4px #003399;
+            }
+            .text-primary {
+                font-size: 9pt;
+                font-family: Arial;
+                font-weight: normal;
+                color: #FFFFFF;
+            }
+        """)
 
-    def detect_linux_distribution(self):
-        try:
-            # Read /etc/os-release to detect distribution
-            distro_id = ""
-            version_id = ""
-            with open('/etc/os-release', 'r') as f:
-                for line in f:
-                    if line.startswith('ID='):
-                        distro_id = line.split('=')[1].strip().strip('"')
-                    elif line.startswith('VERSION_ID='):
-                        version_id = line.split('=')[1].strip().strip('"')
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
-            return {'ID': distro_id, 'VERSION_ID': version_id}
-        except Exception as e:
-            print(f"Error detecting Linux distribution: {str(e)}")
-            return None
+        # Title text
+        title_label = Gtk.Label(label="Welcome to Microsoft Windows")
+        title_label.get_style_context().add_class("title")
+        title_label.set_halign(Gtk.Align.START)
+        title_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(title_label, 48, 24)
+        title_label.set_size_request(434, 77)
 
-    def install_dependencies(self, distro_info):
-        try:
-            if distro_info['ID'].lower() == 'debian':
-                subprocess.run(['sudo', 'apt', 'install', 'libgdk-pixbuf-2.0-dev', 'libglib2.0-dev', 'libgtk-3-dev', 'liblightdm-gobject-1-dev', 'gettext', 'libsqlite3-dev', 'python3-packaging', 'python3-venv', 'ruby-sass', 'libgarcon-1-dev', 'libgarcon-gtk3-1-dev', 'libpulse-dev', '-y'])
-            elif distro_info['ID'].lower() == 'alpine':
-                subprocess.run(['sudo', 'apk', 'add', 'libgdk-pixbuf-2.0-dev', 'libglib2.0-dev', 'libgtk-3-dev', 'liblightdm-gobject-1', 'gettext', 'libsqlite3-dev', 'python3-packaging', 'python3-venv', 'ruby-sass', 'libgarcon-1-dev', 'libgarcon-gtk3-1-dev', 'libpulse-dev'])
-            elif distro_info['ID'].lower() == 'void':
-                subprocess.run(['sudo', 'xbps-install', '-S', 'libgdk-pixbuf-2.0-dev', 'libglib2.0-dev', 'libgtk-3-dev', 'liblightdm-gobject-1', 'gettext', 'libsqlite3-dev', 'python3-packaging', 'python3-venv', 'ruby-sass', 'libgarcon-1-dev', 'libgarcon-gtk3-1-dev', 'libpulse-dev'])
-            else:
-                raise RuntimeError(f"Unsupported distribution: {distro_info['ID']}")
-        except Exception as e:
-            raise RuntimeError(f"Error installing dependencies: {str(e)}")
+        # Description text
+        desc_label = Gtk.Label(label="Thank you for purchasing Microsoft Windows XP.")
+        desc_label.get_style_context().add_class("text-primary")
+        desc_label.set_halign(Gtk.Align.START)
+        desc_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(desc_label, -69, 79)
+        desc_label.set_size_request(500, 50)
 
-    def configure_lightdm(self, distro_info):
-        try:
-            if distro_info['ID'].lower() in ['debian', 'alpine', 'void']:
-                # Modify /etc/lightdm/web-greeter.yml and set theme: WelcomeXP
-                subprocess.run(['sudo', 'sed', '-i', '/theme:/c\    theme: WelcomeXP', '/etc/lightdm/web-greeter.yml'])
-            else:
-                raise RuntimeError(f"Unsupported distribution: {distro_info['ID']}")
-        except Exception as e:
-            raise RuntimeError(f"Error configuring lightdm: {str(e)}")
+        # Instruction text
+        instr_label = Gtk.Label(label="Let's spend a few minutes setting up your computer.")
+        instr_label.get_style_context().add_class("text-primary")
+        instr_label.set_halign(Gtk.Align.START)
+        instr_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(instr_label, -10, 106)
+        instr_label.set_size_request(400, 50)
 
-    def update_status(self, message):
-        # Update the status label
-        self.status_label.set_text(message)
-        while Gtk.events_pending():
-            Gtk.main_iteration()
+        # Additional instruction text
+        add_instr_label = Gtk.Label(label="To continue, click Next.")
+        add_instr_label.get_style_context().add_class("text-primary")
+        add_instr_label.set_halign(Gtk.Align.START)
+        add_instr_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(add_instr_label, -76, 370)
+        add_instr_label.set_size_request(300, 50)
+
+    def init_video_player(self):
+        self.video_overlay = Gtk.DrawingArea()
+        self.fixed_container.put(self.video_overlay, 0, 0)  # Set position to cover the whole window
+        self.video_overlay.set_size_request(782, 495)  # Set size to cover the whole window
+
+        self.video_player = Gst.ElementFactory.make("playbin", "video-player")
+        self.video_player.set_property("uri", f"file://{os.path.abspath(self.video_uri)}")
+
+        bus = self.video_player.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message)
+
+        self.video_overlay.connect("realize", self.on_video_overlay_realize)
+
+        self.video_player.set_state(Gst.State.PLAYING)
+
+    def on_video_overlay_realize(self, widget):
+        window = widget.get_window()
+        window.ensure_native()
+        xid = window.get_xid()
+        if xid:
+            GstVideo.VideoOverlay.set_window_handle(self.video_player, xid)
+        else:
+            print("Could not get XID for the video overlay window")
+
+    def init_music_player(self, music_uri):
+        self.music_player = Gst.ElementFactory.make("playbin", "music-player")
+        self.music_player.set_property("uri", f"file://{os.path.abspath(music_uri)}")
+
+        self.music_player.set_state(Gst.State.PLAYING)
+
+    def on_message(self, bus, message):
+        t = message.type
+        if t == Gst.MessageType.EOS:
+            self.video_player.set_state(Gst.State.NULL)  # Stop video playback
+            self.clear_video_overlay()  # Clear video overlay
+            self.switch_to_ui()  # Switch back to UI after video ends
+        elif t == Gst.MessageType.ERROR:
+            err, debug = message.parse_error()
+            print(f"Error: {err}. Debugging info: {debug}")
+            self.video_player.set_state(Gst.State.NULL)
+
+    def clear_video_overlay(self):
+        # Clear the drawing area by hiding it
+        self.video_overlay.hide()
+
+    def switch_to_ui(self):
+        # Implement switching back to UI logic here
+        print("Switching back to UI after video ends")
+        # Example: Show relevant UI elements or perform actions
+
+    def on_next_button_clicked(self, widget, event):
+        print("Next button clicked!")
+        self.update_next_button_image()
+
+    def update_next_button_image(self):
+        # Change the button image to 'continue_clicked.png'
+        new_pixbuf = GdkPixbuf.Pixbuf.new_from_file('winxp-imgs/continue_clicked.png')
+        new_pixbuf = new_pixbuf.scale_simple(30, 30, GdkPixbuf.InterpType.BILINEAR)
+        self.next_button_image.set_from_pixbuf(new_pixbuf)
+        self.next_button_image.queue_draw()
+
+    def on_destroy(self, widget):
+        self.video_player.set_state(Gst.State.NULL)
+        self.music_player.set_state(Gst.State.NULL)
+        Gtk.main_quit()
 
 if __name__ == "__main__":
-    if os.geteuid() != 0:
-        print("This script needs to be run with superuser privileges (sudo).")
-        exit(1)
-
-    WinXPThemeInstaller()
+    Gst.init(None)
+    win = XPWelcomeWindow()
     Gtk.main()
