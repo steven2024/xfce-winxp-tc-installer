@@ -1,16 +1,21 @@
 import gi
 import os
+import tempfile
 gi.require_version('Gtk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 gi.require_version('Gst', '1.0')
 gi.require_version('GstVideo', '1.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, Gst, GstVideo
 
+# Set XDG_RUNTIME_DIR if not set
+if 'XDG_RUNTIME_DIR' not in os.environ:
+    os.environ['XDG_RUNTIME_DIR'] = tempfile.mkdtemp()
 
 class XPWelcomeWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="XP OOBE Theme Installer")
         self.set_default_size(782, 495)
+        self.set_resizable(False)  # Lock the window size
 
         # Create a fixed container to hold the background image and overlay elements
         self.fixed_container = Gtk.Fixed()
@@ -54,7 +59,7 @@ class XPWelcomeWindow(Gtk.Window):
         self.event_box.connect("button-press-event", self.on_next_button_clicked)
 
         # Video player setup
-        self.video_uri = 'intro-wmv/intro.wmv'  # Path to your video file
+        self.video_uri = 'intro-wmv/intro-scaled.mp4'  # Path to your video file
         self.init_video_player()
 
         # Music player setup
@@ -143,23 +148,56 @@ class XPWelcomeWindow(Gtk.Window):
         self.fixed_container.put(self.video_overlay, 0, 0)  # Set position to cover the whole window
         self.video_overlay.set_size_request(782, 495)  # Set size to cover the whole window
 
-        self.video_player = Gst.ElementFactory.make("playbin", "video-player")
-        self.video_player.set_property("uri", f"file://{os.path.abspath(self.video_uri)}")
+        # Create a Gst pipeline
+        self.pipeline = Gst.Pipeline.new("video_pipeline")
 
-        bus = self.video_player.get_bus()
+        # Create elements
+        self.source = Gst.ElementFactory.make("uridecodebin", "video_source")
+        self.videoscale = Gst.ElementFactory.make("videoscale", "video_scaler")
+        self.videoconvert = Gst.ElementFactory.make("videoconvert", "video_converter")
+        self.capsfilter = Gst.ElementFactory.make("capsfilter", "caps_filter")
+        self.sink = Gst.ElementFactory.make("glimagesink", "video_sink")
+
+        # Configure elements
+        self.source.set_property("uri", f"file://{os.path.abspath(self.video_uri)}")
+
+        # Set caps for scaling
+        caps = Gst.Caps.from_string("video/x-raw, width=782, height=495")
+        self.capsfilter.set_property("caps", caps)
+
+        # Add elements to pipeline
+        self.pipeline.add(self.source)
+        self.pipeline.add(self.videoscale)
+        self.pipeline.add(self.videoconvert)
+        self.pipeline.add(self.capsfilter)
+        self.pipeline.add(self.sink)
+
+        # Link elements
+        self.source.connect("pad-added", self.on_pad_added)
+        self.videoscale.link(self.videoconvert)
+        self.videoconvert.link(self.capsfilter)
+        self.capsfilter.link(self.sink)
+
+        # Set up message handling
+        bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self.on_message)
 
         self.video_overlay.connect("realize", self.on_video_overlay_realize)
 
-        self.video_player.set_state(Gst.State.PLAYING)
+        # Start playing
+        self.pipeline.set_state(Gst.State.PLAYING)
+
+    def on_pad_added(self, src, pad):
+        sink_pad = self.videoscale.get_static_pad("sink")
+        pad.link(sink_pad)
 
     def on_video_overlay_realize(self, widget):
         window = widget.get_window()
         window.ensure_native()
         xid = window.get_xid()
         if xid:
-            GstVideo.VideoOverlay.set_window_handle(self.video_player, xid)
+            GstVideo.VideoOverlay.set_window_handle(self.sink, xid)
         else:
             print("Could not get XID for the video overlay window")
 
@@ -172,13 +210,13 @@ class XPWelcomeWindow(Gtk.Window):
     def on_message(self, bus, message):
         t = message.type
         if t == Gst.MessageType.EOS:
-            self.video_player.set_state(Gst.State.NULL)  # Stop video playback
+            self.pipeline.set_state(Gst.State.NULL)  # Stop video playback
             self.clear_video_overlay()  # Clear video overlay
             self.switch_to_ui()  # Switch back to UI after video ends
         elif t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             print(f"Error: {err}. Debugging info: {debug}")
-            self.video_player.set_state(Gst.State.NULL)
+            self.pipeline.set_state(Gst.State.NULL)
 
     def clear_video_overlay(self):
         # Clear the drawing area by hiding it
@@ -187,7 +225,6 @@ class XPWelcomeWindow(Gtk.Window):
     def switch_to_ui(self):
         # Implement switching back to UI logic here
         print("Switching back to UI after video ends")
-        # Example: Show relevant UI elements or perform actions
 
     def on_next_button_clicked(self, widget, event):
         print("Next button clicked!")
@@ -201,7 +238,7 @@ class XPWelcomeWindow(Gtk.Window):
         self.next_button_image.queue_draw()
 
     def on_destroy(self, widget):
-        self.video_player.set_state(Gst.State.NULL)
+        self.pipeline.set_state(Gst.State.NULL)
         self.music_player.set_state(Gst.State.NULL)
         Gtk.main_quit()
 
