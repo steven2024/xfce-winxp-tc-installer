@@ -1,11 +1,11 @@
 # Windows XP Theme Installer
 **Overview**
 
-This PyGTK-based GUI program automates the installation process of the [xfce-winxp-tc](https://github.com/rozniak/xfce-winxp-tc) theme on Linux systems. It simplifies the installation steps that currently require manual compilation and package installation.
+This PyGObject-based GUI program automates the installation process of the [xfce-winxp-tc](https://github.com/rozniak/xfce-winxp-tc) theme on Linux systems. It simplifies the installation steps that currently require manual compilation and package installation.
 
 **Current Progress**
 
-The current UI of the PyGTK program is simple and user-friendly. It recreates the Windows XP OOBE. You can click a button to install the winxp-xfce-tc theme.
+The current UI of the PyGObject program is simple and user-friendly. It recreates the Windows XP OOBE. You can click a button to install the winxp-xfce-tc theme.
 
 - ***Note***
     - The installation functionality for the winxp-xfce-tc theme has not been implemented yet. The current focus has been on developing the user interface and ensuring it is ready for the installation features.
