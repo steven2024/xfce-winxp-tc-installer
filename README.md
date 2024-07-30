@@ -8,7 +8,8 @@ This PyGObject-based GUI program automates the installation process of the [xfce
 The current UI of the PyGObject program is simple and user-friendly. It recreates the Windows XP OOBE. You can click a button to install the winxp-xfce-tc theme.
 
 - ***Note***
-    - The installation functionality for the winxp-xfce-tc theme has not been implemented yet. The current focus has been on developing the user interface and ensuring it is ready for the installation features.
+    - The installation functionality has been added, but it is currently only available for Debian-based systems. Support for other distributions is planned for future releases.
+    - Rozniak has started working on porting my work on the theme installer over to C for integration with his theme. This work is still in progress, and the C-based version is not yet complete. The goal is to enhance the theme installer to be more closely integrated with the theme itself.
 
 **Current Features**
 
