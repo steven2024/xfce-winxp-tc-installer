@@ -1,10 +1,12 @@
 import gi
 import os
 import tempfile
+import threading
+import subprocess
+
 gi.require_version('Gtk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 gi.require_version('Gst', '1.0')
-gi.require_version('GstVideo', '1.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, Gst, GstVideo
 
 # Set XDG_RUNTIME_DIR if not set
@@ -16,6 +18,12 @@ class XPWelcomeWindow(Gtk.Window):
         Gtk.Window.__init__(self, title="XP OOBE Theme Installer")
         self.set_default_size(782, 495)
         self.set_resizable(False)  # Lock the window size
+
+        # Connect to the 'realize' signal to set the custom cursor
+        self.connect("realize", self.on_window_realized)
+
+        # Apply GTK theme
+        self.apply_gtk_theme('winxp-theme/Windows XP style (Blue)/gtk-3.0/gtk.css')
 
         # Create a fixed container to hold the background image and overlay elements
         self.fixed_container = Gtk.Fixed()
@@ -39,21 +47,21 @@ class XPWelcomeWindow(Gtk.Window):
         self.event_box.add(self.next_button_image)
 
         # Create a label with underlined 'N' and white text
-        next_label = Gtk.Label()
-        next_label.set_markup('<span foreground="white" font="Tahoma 10"><u>N</u>ext</span>')
-        next_label.set_halign(Gtk.Align.START)
+        self.next_label = Gtk.Label()
+        self.next_label.set_markup('<span foreground="white" font="Tahoma 10"><u>N</u>ext</span>')
+        self.next_label.set_halign(Gtk.Align.START)
 
         # Create a box to hold the label and the button
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hbox.pack_start(next_label, False, False, 0)
-        hbox.pack_start(self.event_box, False, False, 0)
+        self.hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.hbox.pack_start(self.next_label, False, False, 0)
+        self.hbox.pack_start(self.event_box, False, False, 0)
 
         # Calculate position for the hbox to be centered at the bottom right corner
         button_x = 782 - 30 - 5  # 782 is the width of the window, 30 is the width of the button, 5 is the amount to move left
         button_y = 495 - 40 + (40 - 30) // 2  # 495 is the height of the window, 40 is the bottom border height
 
         # Place the hbox at the calculated coordinates on the fixed container
-        self.fixed_container.put(hbox, button_x - 60, button_y)  # Adjust x position to accommodate the label
+        self.fixed_container.put(self.hbox, button_x - 60, button_y)  # Adjust x position to accommodate the label
 
         # Connect a signal to handle button clicks
         self.event_box.connect("button-press-event", self.on_next_button_clicked)
@@ -65,9 +73,38 @@ class XPWelcomeWindow(Gtk.Window):
         # Music player setup
         self.init_music_player('title-wma/Isk3k3.mp3')  # Path to your music file
 
+        # Click sound player setup
+        self.click_sound_uri = 'winxp-click/start.wav'  # Path to your click sound file
+        self.init_click_sound_player()
+
         self.connect("destroy", self.on_destroy)
 
+        # Track the number of times the next button is pressed
+        self.next_button_click_count = 0
+
         self.show_all()
+
+    def on_window_realized(self, widget):
+        # Set the initial custom cursor
+        self.set_custom_cursor('winxp-imgs/arrow.png')
+
+    def set_custom_cursor(self, cursor_path):
+        if os.path.isfile(cursor_path):
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(cursor_path)
+            cursor = Gdk.Cursor.new_from_pixbuf(Gdk.Display.get_default(), pixbuf, 0, 0)
+            self.get_window().set_cursor(cursor)
+        else:
+            print(f"Cursor file {cursor_path} not found.")
+
+    def apply_gtk_theme(self, theme_path):
+        if os.path.isfile(theme_path):
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_path(theme_path)
+            Gtk.StyleContext.add_provider_for_screen(
+                Gdk.Screen.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        else:
+            print(f"Theme file {theme_path} not found.")
 
     def load_background_image(self, image_path):
         # Load and set the background image in the fixed container
@@ -112,36 +149,36 @@ class XPWelcomeWindow(Gtk.Window):
         )
 
         # Title text
-        title_label = Gtk.Label(label="Welcome to Microsoft Windows")
-        title_label.get_style_context().add_class("title")
-        title_label.set_halign(Gtk.Align.START)
-        title_label.set_valign(Gtk.Align.START)
-        self.fixed_container.put(title_label, 48, 24)
-        title_label.set_size_request(434, 77)
+        self.title_label = Gtk.Label(label="Welcome to Microsoft Windows")
+        self.title_label.get_style_context().add_class("title")
+        self.title_label.set_halign(Gtk.Align.START)
+        self.title_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(self.title_label, 48, 24)
+        self.title_label.set_size_request(434, 77)
 
         # Description text
-        desc_label = Gtk.Label(label="Thank you for purchasing Microsoft Windows XP.")
-        desc_label.get_style_context().add_class("text-primary")
-        desc_label.set_halign(Gtk.Align.START)
-        desc_label.set_valign(Gtk.Align.START)
-        self.fixed_container.put(desc_label, -69, 79)
-        desc_label.set_size_request(500, 50)
+        self.desc_label = Gtk.Label(label="Thank you for purchasing Microsoft Windows XP.")
+        self.desc_label.get_style_context().add_class("text-primary")
+        self.desc_label.set_halign(Gtk.Align.START)
+        self.desc_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(self.desc_label, -69, 79)
+        self.desc_label.set_size_request(500, 50)
 
         # Instruction text
-        instr_label = Gtk.Label(label="Let's spend a few minutes setting up your computer.")
-        instr_label.get_style_context().add_class("text-primary")
-        instr_label.set_halign(Gtk.Align.START)
-        instr_label.set_valign(Gtk.Align.START)
-        self.fixed_container.put(instr_label, -10, 106)
-        instr_label.set_size_request(400, 50)
+        self.instr_label = Gtk.Label(label="Let's spend a few minutes setting up your computer.")
+        self.instr_label.get_style_context().add_class("text-primary")
+        self.instr_label.set_halign(Gtk.Align.START)
+        self.instr_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(self.instr_label, -10, 106)
+        self.instr_label.set_size_request(400, 50)
 
         # Additional instruction text
-        add_instr_label = Gtk.Label(label="To continue, click Next.")
-        add_instr_label.get_style_context().add_class("text-primary")
-        add_instr_label.set_halign(Gtk.Align.START)
-        add_instr_label.set_valign(Gtk.Align.START)
-        self.fixed_container.put(add_instr_label, -76, 370)
-        add_instr_label.set_size_request(300, 50)
+        self.add_instr_label = Gtk.Label(label="To continue, click Next.")
+        self.add_instr_label.get_style_context().add_class("text-primary")
+        self.add_instr_label.set_halign(Gtk.Align.START)
+        self.add_instr_label.set_valign(Gtk.Align.START)
+        self.fixed_container.put(self.add_instr_label, -76, 370)
+        self.add_instr_label.set_size_request(300, 50)
 
     def init_video_player(self):
         self.video_overlay = Gtk.DrawingArea()
@@ -201,12 +238,6 @@ class XPWelcomeWindow(Gtk.Window):
         else:
             print("Could not get XID for the video overlay window")
 
-    def init_music_player(self, music_uri):
-        self.music_player = Gst.ElementFactory.make("playbin", "music-player")
-        self.music_player.set_property("uri", f"file://{os.path.abspath(music_uri)}")
-
-        self.music_player.set_state(Gst.State.PLAYING)
-
     def on_message(self, bus, message):
         t = message.type
         if t == Gst.MessageType.EOS:
@@ -226,16 +257,113 @@ class XPWelcomeWindow(Gtk.Window):
         # Implement switching back to UI logic here
         print("Switching back to UI after video ends")
 
+    def init_music_player(self, music_uri):
+        self.music_player = Gst.ElementFactory.make("playbin", "music-player")
+        self.music_player.set_property("uri", f"file://{os.path.abspath(music_uri)}")
+
+        self.music_player.set_state(Gst.State.PLAYING)
+
+    def init_click_sound_player(self):
+        self.click_player = Gst.ElementFactory.make("playbin", "click-player")
+        self.click_player.set_property("uri", f"file://{os.path.abspath(self.click_sound_uri)}")
+
+    def play_click_sound(self):
+        self.click_player.set_state(Gst.State.NULL)  # Stop any previous instances
+        self.click_player.set_state(Gst.State.PLAYING)
+
     def on_next_button_clicked(self, widget, event):
         print("Next button clicked!")
-        self.update_next_button_image()
+        self.play_click_sound()  # Play click sound
+        self.set_wait_cursor()
+        self.next_button_click_count += 1
+
+        if self.next_button_click_count == 1:
+            self.update_text_elements("Setup Your Preferences", "Choose your preferred settings.",
+                                      "You can customize your settings here.", "To apply the settings, click Next.")
+            self.update_next_button_image()
+            self.reset_cursor_later()
+        elif self.next_button_click_count == 2:
+            self.update_text_elements("Confirm Your Settings", "Please review your settings.",
+                                      "Make sure everything is correct.", "To proceed, click Next.")
+            self.update_next_button_image()
+            self.reset_cursor_later()
+        elif self.next_button_click_count == 3:
+            self.update_text_elements("Installing Theme", "Please wait while the theme is being installed.",
+                                      "", "")
+            self.next_label.set_markup('<span foreground="white" font="Tahoma 10"><u>F</u>inish</span>')
+            self.set_disabled_button_image()
+            self.run_install_script()
+        elif self.next_button_click_count == 4:
+            self.update_text_elements("Installation Complete", "The theme has been installed successfully.",
+                                      "", "Click Finish to exit.")
+            self.next_label.set_markup('<span foreground="white" font="Tahoma 10"><u>F</u>inish</span>')
+            self.update_next_button_image()
+            threading.Timer(1, Gtk.main_quit).start()
 
     def update_next_button_image(self):
-        # Change the button image to 'continue_clicked.png'
         new_pixbuf = GdkPixbuf.Pixbuf.new_from_file('winxp-imgs/continue_clicked.png')
         new_pixbuf = new_pixbuf.scale_simple(30, 30, GdkPixbuf.InterpType.BILINEAR)
         self.next_button_image.set_from_pixbuf(new_pixbuf)
         self.next_button_image.queue_draw()
+
+        # Schedule the button image to change back to 'continue.png' after a few seconds
+        threading.Timer(1, self.reset_button_image).start()
+
+    def reset_button_image(self):
+        new_pixbuf = GdkPixbuf.Pixbuf.new_from_file('winxp-imgs/continue.png')
+        new_pixbuf = new_pixbuf.scale_simple(30, 30, GdkPixbuf.InterpType.BILINEAR)
+        self.next_button_image.set_from_pixbuf(new_pixbuf)
+        self.next_button_image.queue_draw()
+
+    def update_text_elements(self, title, desc, instr, add_instr):
+        self.title_label.set_text(title)
+        self.desc_label.set_text(desc)
+        self.instr_label.set_text(instr)
+        self.add_instr_label.set_text(add_instr)
+
+    def run_install_script(self):
+        print("Running installation script!")
+        self.set_wait_cursor()
+        install_process = subprocess.Popen("./install.sh", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        threading.Thread(target=self.monitor_installation, args=(install_process,)).start()
+
+    def monitor_installation(self, process):
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        process.stdout.close()
+        process.wait()
+        if process.returncode == 0:
+            self.on_installation_complete()
+        else:
+            for line in iter(process.stderr.readline, ''):
+                print(line, end='')
+            process.stderr.close()
+            print(f"Installation failed with error code: {process.returncode}")
+
+    def on_installation_complete(self):
+        print("Installation completed successfully!")
+        self.update_text_elements("Installation Complete", "The theme has been installed successfully.",
+                                  "", "Click Finish to exit.")
+        self.event_box.set_sensitive(True)
+        self.next_button_click_count = 3  # Ensure the next click exits the application
+        self.reset_button_image()  # Ensure the button image is 'continue.png'
+        self.reset_cursor()
+
+    def set_disabled_button_image(self):
+        new_pixbuf = GdkPixbuf.Pixbuf.new_from_file('winxp-imgs/continue_disabled.png')
+        new_pixbuf = new_pixbuf.scale_simple(30, 30, GdkPixbuf.InterpType.BILINEAR)
+        self.next_button_image.set_from_pixbuf(new_pixbuf)
+        self.next_button_image.queue_draw()
+        self.event_box.set_sensitive(False)
+
+    def set_wait_cursor(self):
+        self.set_custom_cursor('winxp-imgs/busy.png')
+
+    def reset_cursor(self):
+        self.set_custom_cursor('winxp-imgs/arrow.png')
+
+    def reset_cursor_later(self):
+        threading.Timer(1.0, self.reset_cursor).start()
 
     def on_destroy(self, widget):
         self.pipeline.set_state(Gst.State.NULL)

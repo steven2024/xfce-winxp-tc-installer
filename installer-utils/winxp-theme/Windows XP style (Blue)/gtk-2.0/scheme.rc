@@ -1,0 +1,18 @@
+# Text/base
+gtk-color-scheme = "text_color:#000000\nbase_color:#FFFFFF"
+# Foreground/background
+gtk-color-scheme = "fg_color:#000000\nbg_color:#ECE9D8"
+# Selected foreground/background
+gtk-color-scheme = "selected_fg_color:#FFFFFF\nselected_bg_color:#316AC5"
+# Insensitive foreground/background
+gtk-color-scheme = "insensitive_fg_color:#808080\ninsensitive_bg_color:#ECE9D8"
+# Menus
+gtk-color-scheme = "menu_color:#ECE9D8"
+# Links
+gtk-color-scheme = "link_color:#000080\nvisited_link_color:#000080"
+# Treeview headers
+gtk-color-scheme = "column_header_color:#ECE9D8\nhover_column_header_color:#ECE9D8"
+# Window decoration
+gtk-color-scheme = "window_color:#ECE9D8"
+# Tooltips
+gtk-color-scheme = "tooltip_fg_color:#000000\ntooltip_bg_color:#FFFFE1"

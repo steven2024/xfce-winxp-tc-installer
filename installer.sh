@@ -25,9 +25,9 @@ install_python() {
     fi
 }
 
-# Function to install PyGTK
-install_pygtk() {
-    echo "Installing PyGTK..."
+# Function to install PyGObject
+install_pygobject() {
+    echo "Installing PyGObject..."
     if command_exists apt-get; then
         sudo apt-get install python3-gi gir1.2-gtk-3.0 -y
     elif command_exists apk; then
@@ -35,7 +35,7 @@ install_pygtk() {
     elif command_exists xbps-install; then
         sudo xbps-install -S py3-gobject3 py3-gtk3
     else
-        echo "Unsupported distribution. PyGTK installation failed."
+        echo "Unsupported distribution. PyGObject installation failed."
         exit 1
     fi
 }
@@ -54,9 +54,9 @@ if ! command_exists python3; then
     install_python
 fi
 
-# Check if PyGTK is installed
+# Check if PyGObject is installed
 if ! python3 -c 'import gi; gi.require_version("Gtk", "3.0")' 2>/dev/null; then
-    install_pygtk
+    install_pygobject
 fi
 
 # Run xp.py
